@@ -3,3 +3,6 @@
 /app/plots/*.png
 /app/plots_2/
 /sample_plots/*.png
+
+#python cache
+__pycache__/
