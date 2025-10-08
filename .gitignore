@@ -1,5 +1,1 @@
 #Ignore plots: 
-*.png
-/app/plots/*.png
-/app/plots_2/
-/sample_plots/*.png
