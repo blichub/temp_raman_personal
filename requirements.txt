@@ -1,0 +1,6 @@
+Flask
+numpy
+matplotlib
+pandas
+scipy
+PyWavelets

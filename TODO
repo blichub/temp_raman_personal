@@ -1,0 +1,12 @@
+TODO:
+-----
+
+Future tasks to do(Future guy/gal or again Alan):
+------------
+-add more microplastics to reference database
+-correction for match overlap? Seems the reference has an offset
+-github large file problem (database)
+-improve matching algorithm: consider missing peaks outside of reference range
+-Superimposed plots: Implement a Neural Network to predict multiple matches
+
+
