@@ -11,6 +11,11 @@ from numpy.polynomial.polynomial import Polynomial #for polynomial fitting algor
 import pandas as pd
 import pywt #for wavelet algorithm
 import functools
+#import pytorch to substitute the peak detection algorithm
+import torch
+from app.models.spectrum_model import SpectrumClassifier
+
+
 
 height_threshold = 0.25 # Height threshold for peak detection
 
@@ -134,6 +139,52 @@ def normalize_data(intensities):
     """
     max_intensity = max(intensities)
     return [i / max_intensity for i in intensities]
+
+# after file processing and baseline correction is done, we can either do the peak identification method or the neural network method
+
+#The neural network method aims to classify into each sample of the reference spectra, and has a first convolutional layer, a max pooling layer, a second convolutional layer, another max pooling layer, and finally a fully connected layer that outputs the class probabilities.
+def neural_network_process_spectrum(intensities, wavelengths):
+    """Process a spectrum using a neural network to identify material.
+    
+    This function uses a pre-trained neural network model to classify the input
+    spectrum into one of the reference materials. The model processes the intensity
+    values and outputs the predicted material ID.
+    
+    Args:
+        intensities (list): List of intensity values for the spectrum
+        wavelengths (list): List of corresponding wave numbers for each intensity value
+    Returns:
+        str: Predicted material ID based on the neural network classification
+    """
+    # Load the pre-trained model (ensure the model file is in the correct path)
+    model_path = 'app/models/spectrum_classifier.pth'
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"Model file not found at {model_path}")
+
+    model = torch.load(model_path)
+    model.eval()
+
+    # Prepare the input data for the model
+    input_data = np.array(intensities, dtype=np.float32)
+    input_data = (input_data - np.mean(input_data)) / np.std(input_data)  # Standardize
+    input_tensor = torch.tensor(input_data).unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
+
+    # Perform inference
+    with torch.no_grad():
+        output = model(input_tensor)
+        predicted_class = torch.argmax(output, dim=1).item()
+
+    # Map the predicted class index to material ID
+    if predicted_class < len(reference_spectra_ids):
+        predicted_material_id = reference_spectra_ids[predicted_class]
+    else:
+        predicted_material_id = "Unknown"
+
+    return predicted_material_id
+
+    # It is best practice to define your neural network model in a separate file, such as app/models/spectrum_model.py.
+    # This keeps your model architecture organized and separate from utility functions.
+    # You can then import your model class in utils.py when needed.
 
 def process_spectrum(intensities, wavelengths):
     """Process a spectrum by identifying significant peaks.
