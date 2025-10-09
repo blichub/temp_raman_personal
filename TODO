@@ -10,3 +10,7 @@ Future tasks to do(Future guy/gal or again Alan):
 -Superimposed plots: Implement a Neural Network to predict multiple matches
 
 
+-The algorithm to identify the microplastics from the pics in the spectrum of the sample should be reviewed. For now Gaussian-weighted algorithm was used,
+but whether this choice is relevant must be confirmed.
+-If multiple microplastics are present in the sample, the Raman struggles
+analyzing them.

@@ -6,3 +6,40 @@
 
 #python cache
 __pycache__/
+
+#database
+app/database/microplastics_reference.db
+*.db
+
+#virtual environment
+.venv/  
+env/
+venv/
+
+#IDE settings
+.vscode/
+.idea/
+*.code-workspace
+
+#macOS
+.DS_Store
+#Windows
+Thumbs.db   
+#log files
+*.log
+#env files
+.env        
+#docker
+*.env   
+docker-compose.override.yml
+#others
+*.sqlite3   
+*.sqlite
+*.pyc
+*.pyo
+*.pyd
+*.swp
+*.swo               
+*.bak
+*.tmp
+*.orig

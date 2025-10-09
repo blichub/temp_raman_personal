@@ -509,6 +509,9 @@ def plot_sample_with_reference(sample_id, sample_wavelengths, sample_intensities
     plt.legend()
 
     # Save the plot to a file
+    # if directory sample plot does not exist, create it
+    if not os.path.exists('app/sample_plots'):
+        os.makedirs('app/sample_plots')
     plot_file_path = f'app/sample_plots/sample_{sample_id}_with_match.png'
     plot_file_path_to_render = f'sample_{sample_id}_with_match.png'
     plt.savefig(plot_file_path)
