@@ -570,23 +570,23 @@ def plot_sample_with_reference(sample_id, sample_wavelengths, sample_intensities
 
     return plot_file_path_to_render
 
-def process_and_compare_sample(file, sample_id, algorithm, param):
+def process_and_compare_sample(file, sample_id, baseline_algorithm, param):
     df = process_uploaded_file(file)
     sample_intensities = df.iloc[:, 0].tolist()
     sample_wavelengths = df.iloc[:, 1].tolist()
 
     # Baseline correction for sample data
     # Apply the chosen baseline correction algorithm
-    if algorithm == 'polynomial':
+    if baseline_algorithm == 'polynomial':
         corrected_sample_intensities = baseline_polynomial(sample_intensities, degree=int(param))
         normalized_sample_intensities = normalize_data(corrected_sample_intensities)
-    elif algorithm == 'rolling_ball':
+    elif baseline_algorithm == 'rolling_ball':
         corrected_sample_intensities = rolling_ball_baseline(sample_intensities, window_size=int(param))
         normalized_sample_intensities = normalize_data(corrected_sample_intensities)
-    elif algorithm == 'wavelet':
+    elif baseline_algorithm == 'wavelet':
         corrected_sample_intensities = wavelet_baseline(sample_intensities, level=int(param))
         normalized_sample_intensities = normalize_data(corrected_sample_intensities)
-    elif algorithm == 'derivative':
+    elif baseline_algorithm == 'derivative':
         corrected_sample_intensities = derivative_baseline(sample_intensities, window_length=int(param))
         normalized_sample_intensities = normalize_data(corrected_sample_intensities)
     else:

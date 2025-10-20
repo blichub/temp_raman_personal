@@ -1,5 +1,6 @@
 # Use the official Python image
-FROM python:3.9-slim
+# careful: will be unavailable in docker server in october 2026. switch to newer version before then.
+FROM python:3.10-slim
 
 # Set the working directory
 WORKDIR /app

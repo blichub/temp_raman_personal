@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
 class SpectrumClassifier(nn.Module):
     def __init__(self, num_classes):
         super(SpectrumClassifier, self).__init__()

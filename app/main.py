@@ -29,7 +29,7 @@ def index():
         file = request.files["file"]
         location = request.form.get("location", "").strip().upper()
         sample_type = request.form.get("sample_type", "").strip()
-        algorithm = request.form.get("algorithm")
+        baseline_algorithm = request.form.get("baseline_algorithm")
         param = request.form.get("param")
 
         if file and location and sample_type:
@@ -37,7 +37,7 @@ def index():
             sample_id = generate_sample_id(location, sample_type)
 
             best_match, results, plot_file = process_and_compare_sample(
-                file, sample_id, algorithm, param
+                file, sample_id, baseline_algorithm, param
             )
 
             # Calculate processing time

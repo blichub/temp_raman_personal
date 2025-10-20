@@ -4,3 +4,4 @@ matplotlib
 pandas
 scipy
 PyWavelets
+torch --index-url https://download.pytorch.org/whl/cpu
