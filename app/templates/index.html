@@ -136,49 +136,52 @@
             border-color: #545b62;
         }
     </style>
-    <script>        function updateParameterInput() {
+    <script>
+        function updateBaselineParameterInput() {
             const baseline_algorithm = document.getElementById('baseline_algorithm').value;
-            const matching_algorithm = document.getElementById('matching_algorithm').value;
-            const paramInput1 = document.getElementById('param-input1');
-            const paramInput2 = document.getElementById('param-input2');
+            const paramInput1 = document.getElementById('baseline_param-input');
             paramInput1.style.display = 'none';  // Hide parameters input by default
-            paramInput2.style.display = 'none';  // Hide parameters input by default
             switch (baseline_algorithm) {
                 case 'polynomial':
-                    document.getElementById('param-label1').innerText = 'Degree';
-                    document.getElementById('param1').placeholder = 'e.g., 3';
+                    document.getElementById('baseline_param-label').innerText = 'Degree';
+                    document.getElementById('baseline_param').placeholder = 'e.g., 3';
                     paramInput1.style.display = 'block';
                     break;
                 case 'rolling_ball':
-                    document.getElementById('param-label1').innerText = 'Window Size';
-                    document.getElementById('param1').placeholder = 'e.g., 50';
+                    document.getElementById('baseline_param-label').innerText = 'Window Size';
+                    document.getElementById('baseline_param').placeholder = 'e.g., 50';
                     paramInput1.style.display = 'block';
                     break;
                 case 'wavelet':
-                    document.getElementById('param-label1').innerText = 'Wavelet Level';
-                    document.getElementById('param1').placeholder = 'e.g., 1';
+                    document.getElementById('baseline_param-label').innerText = 'Wavelet Level';
+                    document.getElementById('baseline_param').placeholder = 'e.g., 1';
                     paramInput1.style.display = 'block';
                     break;
                 case 'derivative':
-                    document.getElementById('param-label1').innerText = 'Window Length (smoothing)';
-                    document.getElementById('param1').placeholder = 'e.g., 11';
+                    document.getElementById('baseline_param-label').innerText = 'Window Length (smoothing)';
+                    document.getElementById('baseline_param').placeholder = 'e.g., 11';
                     paramInput1.style.display = 'block';
-                    break;
-            }
-            switch (matching_algorithm) {
-                case 'peak_matching':
-                    document.getElementById('param-label2').innerText = 'Peak Threshold';
-                    document.getElementById('param2').placeholder = 'e.g., 0.1';
-                    paramInput2.style.display = 'block';
-                    break;
-                case 'neural_network':
-                    document.getElementById('param-label2').innerText = 'Model Version';
-                    document.getElementById('param2').placeholder = 'e.g., v1, v2';
-                    paramInput2.style.display = 'block';
                     break;
             }
         }
 
+        function updateMatchingParameterInput() {
+            const matching_algorithm = document.getElementById('matching_algorithm').value;
+            const paramInput = document.getElementById('matching_param-input');
+            paramInput.style.display = 'none';  // Hide parameter input by default
+            switch (matching_algorithm) {
+                case 'peak_matching':
+                    document.getElementById('matching_param-label').innerText = 'Normalized Peak Threshold';
+                    document.getElementById('matching_param').placeholder = 'default: 0.25';
+                    paramInput.style.display = 'block';
+                    break;
+                case 'neural_network':
+                    document.getElementById('matching_param-label').innerText = 'Model Version';
+                    document.getElementById('matching_param').placeholder = 'e.g., v1, v2';
+                    paramInput.style.display = 'block';
+                    break;
+            }
+        }
         function updateSamplePreview() {
             const location = document.getElementById('location').value.toUpperCase() || 'LOC';
             const sampleType = document.getElementById('sample_type').value || 'TYP';
@@ -222,7 +225,7 @@
         </div>
 
         <label for="baseline_algorithm">Choose Baseline Correction Algorithm:</label>
-        <select id="baseline_algorithm" name="baseline_algorithm" onchange="updateParameterInput()">
+        <select id="baseline_algorithm" name="baseline_algorithm" onchange="updateBaselineParameterInput()">
             <option value="none">None</option>
             <option value="polynomial">Polynomial Fitting</option>
             <option value="rolling_ball">Rolling Ball</option>
@@ -233,23 +236,23 @@
 
         <!--is this div needed between the two ddropdowns or just at the end and is something else
         for parama heandling-->
-        <div id="param-input1" class="param-input">
-            <label id="param-label1" for="param1"></label>
-            <input type="text" id="param1" name="param1" placeholder="">
+        <div id="baseline_param-input" class="param-input">
+            <label id="baseline_param-label" for="baseline_param"></label>
+            <input type="text" id="baseline_param" name="baseline_param" placeholder="">
         </div>
 
 
         <br>
         <label for="matching_algorithm">Choose Similarity Matching Algorithm:</label>
-        <select id="matching_algorithm" name="matching_algorithm" onchange="updateParameterInput()">
+        <select id="matching_algorithm" name="matching_algorithm" onchange="updateMatchingParameterInput()">
             <option value="none">None</option>
             <option value="peak_matching">Normalization and Peak Matching</option>
             <option value="neural_network">Neural Network</option>
         </select>
 
-        <div id="param-input2" class="param-input">
-            <label id="param-label2" for="param2"></label>
-            <input type="text" id="param2" name="param2" placeholder="">
+        <div id="matching_param-input" class="param-input">
+            <label id="matching_param-label" for="matching_param"></label>
+            <input type="text" id="matching_param" name="matching_param" placeholder="">
         </div>
 
 
@@ -259,8 +262,10 @@
         <button type="submit" class="upload-btn"
             style="padding: 12px 20px; font-size: 1.2rem; min-width: 150px; border-radius: 6px;">Upload</button>
     </form>
-    <a href="/library_list" class="nav-btn" style="padding:8px 12px; font-size:0.95rem; min-width:140px;">View Reference Library</a>
-    <a href="/sample_history" class="nav-btn" style="padding:8px 12px; font-size:0.95rem; min-width:140px;">View Sample History</a>
+    <a href="/library_list" class="nav-btn" style="padding:8px 12px; font-size:0.95rem; min-width:140px;">View Reference
+        Library</a>
+    <a href="/sample_history" class="nav-btn" style="padding:8px 12px; font-size:0.95rem; min-width:140px;">View Sample
+        History</a>
 
     {% if results %}
     <div class="performance-box">

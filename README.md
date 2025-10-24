@@ -144,7 +144,7 @@ Before installing OpenRamanDatabase, ensure you have the following prerequisites
    cd OpenRamanDatabase
    ```
 
-2. **Create Virtual Environment**
+2. **Create Virtual Environment: run on terminal**
    ```bash
    python -m venv venv
    

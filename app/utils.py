@@ -17,7 +17,8 @@ from app.models.spectrum_model import SpectrumClassifier
 
 
 
-height_threshold = 0.25 # Height threshold for peak detection
+# Replace single global with a default constant (keeps backward compatibility)
+default_height_threshold = 0.25  # default threshold for peak detection
 
 db_file_path = 'app/database/microplastics_reference.db'  # Path to SQLite database
 
@@ -186,7 +187,7 @@ def neural_network_process_spectrum(intensities, wavelengths):
     # This keeps your model architecture organized and separate from utility functions.
     # You can then import your model class in utils.py when needed.
 
-def process_spectrum(intensities, wavelengths):
+def process_spectrum(intensities, wavelengths, height_threshold=default_height_threshold):
     """Process a spectrum by identifying significant peaks.
     
     This function detects peaks in the spectrum data that exceed the defined height
@@ -194,8 +195,9 @@ def process_spectrum(intensities, wavelengths):
     and spectrum comparison.
     
     Args:
-        intensities (list): List of intensity values for the spectrum
+        intensities (list): List of intensity values to normalize
         wavelengths (list): List of corresponding wave numbers for each intensity value
+        height_threshold (float, optional): user specified eight threshold for peak detection. Defaults to default_height_threshold.
         
     Returns:
         list: List of tuples, where each tuple contains (wavelength, intensity) for each detected peak
@@ -206,8 +208,9 @@ def process_spectrum(intensities, wavelengths):
 
     return list(zip(peak_wavelengths, peak_intensities))
 
-def plot_spectrum(wavelengths, intensities, peaks, title, filename, directory='app/plots'):
+def plot_spectrum(wavelengths, intensities, peaks, title, filename, directory='app/plots', height_threshold=default_height_threshold):
     """Generate and save a plot of a spectrum with detected peaks.
+    Accepts height_threshold to draw the detection threshold on the plot.
     
     This function creates a visualization of the spectrum data, highlighting detected peaks
     and the threshold used for peak detection. The plot is saved as an image file in the 
@@ -220,6 +223,7 @@ def plot_spectrum(wavelengths, intensities, peaks, title, filename, directory='a
         title (str): Title for the plot, typically the material ID
         filename (str): Filename to save the plot as
         directory (str, optional): Directory to save the plot in. Defaults to 'app/plots'.
+        height_threshold (float, optional): Height threshold for peak detection. Defaults to default_height_threshold.
     """
     if not os.path.exists(directory):
         os.makedirs(directory)
@@ -238,8 +242,9 @@ def plot_spectrum(wavelengths, intensities, peaks, title, filename, directory='a
     plt.savefig(f'{directory}/{filename}')
     plt.close()
 
-def calculate_similarity2(sample_peaks):
+def calculate_similarity2(sample_peaks, height_threshold=default_height_threshold):
     """Calculate similarity between a sample spectrum and all reference spectra.
+    Pass height_threshold to get_peaks() so pre-calculated peaks are filtered accordingly.
     
     This function compares the peaks of a sample spectrum with all reference spectra in the 
     database to find the best match. For each reference spectrum, it calculates similarity 
@@ -249,6 +254,7 @@ def calculate_similarity2(sample_peaks):
     
     Args:
         sample_peaks (list): List of detected peaks in the sample spectrum as (wavelength, intensity) tuples
+        height_threshold (float, optional): Height threshold for peak detection. Defaults to default_height_threshold.
         
     Returns:
         tuple: A tuple containing:
@@ -259,11 +265,8 @@ def calculate_similarity2(sample_peaks):
     window = 35  # Wavelength window size for peak matching (±25 cm⁻¹)
 
     for name in reference_spectra_ids:
-        # intensities, wavelengths, comment = get_spectrum_data(name)
-        # ref_peaks = process_spectrum(intensities, wavelengths)
-
         #Use pre-calculated peaks from the database for efficiency
-        ref_peaks = get_peaks(name)
+        ref_peaks = get_peaks(name, height_threshold=height_threshold)
 
         similarity_scores = []
 
@@ -303,8 +306,9 @@ def calculate_similarity2(sample_peaks):
     best_match = max(similarities, key=similarities.get) if similarities else None
     return similarities, best_match
 
-def calculate_similarity(sample_peaks):
+def calculate_similarity(sample_peaks, height_threshold=default_height_threshold):
     """Calculate similarity using a weighted match score with Gaussian weighting.
+    Pass height_threshold to get_peaks() so pre-calculated peaks are filtered accordingly.
     
     This method compares sample peaks to reference spectra using a similarity score
     that favors close peak positions and similar intensities. Position differences
@@ -312,6 +316,7 @@ def calculate_similarity(sample_peaks):
     
     Args:
         sample_peaks (list): List of (wavenumber, intensity) tuples from the sample spectrum.
+        height_threshold (float, optional): Height threshold for peak detection. Defaults to default_height_threshold.
         
     Returns:
         tuple: (dict of similarity scores per reference ID, best matching reference ID)
@@ -321,7 +326,7 @@ def calculate_similarity(sample_peaks):
     sigma = window / 2.0  # Spread for Gaussian weighting
 
     for name in reference_spectra_ids:
-        ref_peaks = get_peaks(name)
+        ref_peaks = get_peaks(name, height_threshold=height_threshold)
         match_scores = []
 
         for sample_wavenumber, sample_intensity in sample_peaks:
@@ -360,8 +365,9 @@ def calculate_similarity(sample_peaks):
     return similarities, best_match
 
 
-def generate_plots():
+def generate_plots(height_threshold=default_height_threshold):
     """Generate spectral plots for all reference materials in the database.
+    Accepts height_threshold so plotted threshold and peak query use the provided value.
     
     This function creates visualizations for all reference spectra in the database,
     identifying peaks in each spectrum and saving the plots to the plots directory.
@@ -384,18 +390,13 @@ def generate_plots():
             print(f"No data found for {material_id}")
             continue
 
-        # peaks, _ = find_peaks(intensities, height=height_threshold)
-        # peak_wavelengths = [wavelengths[i] for i in peaks]
-        # peak_intensities = [intensities[i] for i in peaks]
-        # peak_data = get_peaks(material_id)
-
         plot_spectrum(
             wavelengths,
             intensities,
-            # list(zip(peak_wavelengths, peak_intensities)),
-            get_peaks(material_id),
+            get_peaks(material_id, height_threshold=height_threshold),
             material_id,
-            f'{material_id}_with_peaks.png'
+            f'{material_id}_with_peaks.png',
+            height_threshold=height_threshold
         )
         plot_count += 1
         
@@ -410,8 +411,9 @@ def generate_plots():
     
     return total_time
 
-def process_and_plot_sample(file, sample_id="Sample"):
+def process_and_plot_sample(file, sample_id="Sample", height_threshold=default_height_threshold):
     """Process an uploaded sample file, detect peaks, and generate a plot.
+    Accepts user-specified height_threshold for peak detection and plotting.
     
     This function takes an uploaded spectrum file, extracts the intensity and wavelength data,
     normalizes the intensities, identifies peaks, and generates a plot visualizing the sample 
@@ -420,6 +422,7 @@ def process_and_plot_sample(file, sample_id="Sample"):
     Args:
         file: The uploaded file containing spectrum data
         sample_id (str, optional): Identifier for the sample. Defaults to "Sample".
+        height_threshold (float, optional): Height threshold for peak detection. Defaults to default_height_threshold.
         
     Returns:
         tuple: A tuple containing:
@@ -431,7 +434,7 @@ def process_and_plot_sample(file, sample_id="Sample"):
 
     wavelengths = df.iloc[:, 1].tolist()
     intensities = df.iloc[:, 0].tolist()
-    sample_peaks = process_spectrum(intensities, wavelengths)
+    sample_peaks = process_spectrum(intensities, wavelengths, height_threshold=height_threshold)
 
     max_intensity = max(intensities)
     intensities = [i / max_intensity for i in intensities]
@@ -440,7 +443,7 @@ def process_and_plot_sample(file, sample_id="Sample"):
     peak_wavelengths = [wavelengths[i] for i in peaks]
     peak_intensities = [intensities[i] for i in peaks]
 
-    plot_spectrum(wavelengths, intensities, list(zip(peak_wavelengths, peak_intensities)), sample_id, filename = f'sample_{sample_id}_with_peaks.png', directory='app/sample_plots')
+    plot_spectrum(wavelengths, intensities, list(zip(peak_wavelengths, peak_intensities)), sample_id, filename = f'sample_{sample_id}_with_peaks.png', directory='app/sample_plots', height_threshold=height_threshold)
 
     return sample_peaks, peak_wavelengths, peak_intensities
 
@@ -529,7 +532,7 @@ def generate_sample_plots(sample_ids):
             continue
 
         # Find peaks in the normalized intensities
-        peaks, _ = find_peaks(intensities, height=height_threshold)
+        peaks, _ = find_peaks(intensities, height=default_height_threshold)
         peak_wavelengths = [wave_numbers[i] for i in peaks]
         peak_intensities = [intensities[i] for i in peaks]
 
@@ -570,7 +573,7 @@ def plot_sample_with_reference(sample_id, sample_wavelengths, sample_intensities
 
     return plot_file_path_to_render
 
-def process_and_compare_sample(file, sample_id, baseline_algorithm, param):
+def process_and_compare_sample(file, sample_id, baseline_algorithm, baseline_param, matching_algorithm=None, matching_param=None, height_threshold=default_height_threshold):
     df = process_uploaded_file(file)
     sample_intensities = df.iloc[:, 0].tolist()
     sample_wavelengths = df.iloc[:, 1].tolist()
@@ -578,24 +581,23 @@ def process_and_compare_sample(file, sample_id, baseline_algorithm, param):
     # Baseline correction for sample data
     # Apply the chosen baseline correction algorithm
     if baseline_algorithm == 'polynomial':
-        corrected_sample_intensities = baseline_polynomial(sample_intensities, degree=int(param))
+        corrected_sample_intensities = baseline_polynomial(sample_intensities, degree=int(baseline_param))
         normalized_sample_intensities = normalize_data(corrected_sample_intensities)
     elif baseline_algorithm == 'rolling_ball':
-        corrected_sample_intensities = rolling_ball_baseline(sample_intensities, window_size=int(param))
+        corrected_sample_intensities = rolling_ball_baseline(sample_intensities, window_size=int(baseline_param))
         normalized_sample_intensities = normalize_data(corrected_sample_intensities)
     elif baseline_algorithm == 'wavelet':
-        corrected_sample_intensities = wavelet_baseline(sample_intensities, level=int(param))
+        corrected_sample_intensities = wavelet_baseline(sample_intensities, level=int(baseline_param))
         normalized_sample_intensities = normalize_data(corrected_sample_intensities)
     elif baseline_algorithm == 'derivative':
-        corrected_sample_intensities = derivative_baseline(sample_intensities, window_length=int(param))
+        corrected_sample_intensities = derivative_baseline(sample_intensities, window_length=int(baseline_param))
         normalized_sample_intensities = normalize_data(corrected_sample_intensities)
     else:
         normalized_sample_intensities = normalize_data(sample_intensities) # No baseline correction applied
 
-    # save_to_csv(corrected_sample_intensities, sample_wavelengths, sample_id) #for troubleshooting
-    # Calculate peaks and find the best match
-    sample_peaks = process_spectrum(normalized_sample_intensities, sample_wavelengths)
-    results, best_match = calculate_similarity(sample_peaks)
+    # Calculate peaks and find the best match using the provided height_threshold
+    sample_peaks = process_spectrum(normalized_sample_intensities, sample_wavelengths, height_threshold=height_threshold)
+    results, best_match = calculate_similarity(sample_peaks, height_threshold=height_threshold)
 
     # Get matched reference data
     ref_intensities, ref_wavelengths, _ = get_spectrum_data(best_match)
@@ -678,8 +680,9 @@ def save_to_csv(intensities, wavenumbers, filename='output.csv'):
     # Save to CSV
     df.to_csv(filename, index=False)
 
-def get_peaks(material_id):
+def get_peaks(material_id, height_threshold=default_height_threshold):
     """Retrieve pre-calculated peaks for a specific material from the reference_peaks table.
+    Now accepts height_threshold to filter peaks returned from the DB.
     
     This function fetches pre-calculated peak data from the reference_peaks table for a given
     material ID. It filters peaks based on the global height_threshold value and returns
@@ -687,6 +690,7 @@ def get_peaks(material_id):
     
     Args:
         material_id (str): The ID of the material to fetch peaks for
+        height_threshold (float, optional): Height threshold for peak detection. Defaults to default_height_threshold.
         
     Returns:
         list: List of tuples, where each tuple contains (wavelength, intensity) for each detected peak
@@ -697,7 +701,7 @@ def get_peaks(material_id):
     
     # Query peaks from the reference_peaks table that exceed the height threshold
     cursor.execute("SELECT wavenumber, intensity FROM reference_peaks WHERE microplastic_id=? AND intensity >= ?", 
-                  (material_id, height_threshold))
+                  (material_id, float(height_threshold)))
     rows = cursor.fetchall()
     conn.close()
     

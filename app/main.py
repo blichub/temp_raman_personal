@@ -30,14 +30,27 @@ def index():
         location = request.form.get("location", "").strip().upper()
         sample_type = request.form.get("sample_type", "").strip()
         baseline_algorithm = request.form.get("baseline_algorithm")
-        param = request.form.get("param")
+        matching_algorithm = request.form.get("matching_algorithm")
+        baseline_param = request.form.get("baseline_param")
+        matching_param = request.form.get("matching_param")
+
+        # New: allow user to provide a custom height threshold (optional)
+        height_threshold_str = request.form.get("height_threshold", "").strip()
+        try:
+            if height_threshold_str:
+                height_threshold = float(height_threshold_str)
+            else:
+                height_threshold = default_height_threshold
+        except ValueError:
+            height_threshold = default_height_threshold
 
         if file and location and sample_type:
             # Generate sample ID in LOC-TYP-YYMMDD-SEQ format
             sample_id = generate_sample_id(location, sample_type)
 
+            # Pass the user-defined height_threshold down to the processing function
             best_match, results, plot_file = process_and_compare_sample(
-                file, sample_id, baseline_algorithm, param
+                file, sample_id, baseline_algorithm, baseline_param, matching_algorithm, matching_param, height_threshold=height_threshold
             )
 
             # Calculate processing time
@@ -48,7 +61,7 @@ def index():
                 "index.html",
                 results=results,
                 best_match=best_match,
-                score=results[best_match],
+                score=results.get(best_match) if results else None,
                 sample_plot=plot_file,
                 sample_id=sample_id,
                 processing_time=f"{processing_time:.4f}",
@@ -247,7 +260,8 @@ def get_spectrum(material_id):
         intensities, wavelengths, _ = get_spectrum_data(material_id)
 
         if intensities and wavelengths:
-            peaks, _ = find_peaks(intensities, height=height_threshold)
+            # Use default threshold for spectrum viewing (unless you supply UI to override here)
+            peaks, _ = find_peaks(intensities, height=default_height_threshold)
             peak_wavelengths = [wavelengths[i] for i in peaks]
             peak_intensities = [intensities[i] for i in peaks]
 
@@ -257,6 +271,7 @@ def get_spectrum(material_id):
                 list(zip(peak_wavelengths, peak_intensities)),
                 material_id,
                 f"{material_id}_with_peaks.png",
+                height_threshold=default_height_threshold,
             )
 
     # Get comment using the cached function
