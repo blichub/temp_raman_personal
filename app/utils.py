@@ -13,7 +13,7 @@ import pywt #for wavelet algorithm
 import functools
 #import pytorch to substitute the peak detection algorithm
 import torch
-from app.models.spectrum_model import SpectrumClassifier
+#from models.spectrum_model import SpectrumClassifier
 
 
 
@@ -67,7 +67,7 @@ def get_all_comments():
     comments_dict = {row[0]: row[1] if row[1] and row[1] != 'None' else '' for row in results}
     return comments_dict
 
-def get_all_ids():
+def get_all_ids(db_file_path=db_file_path):
     """Retrieve all unique material IDs from the microplastics database.
     
     This function makes a database query to fetch all distinct material IDs from
@@ -88,9 +88,9 @@ def get_all_ids():
     return all_ids
 
 # Set reference_spectra_ids with all IDs from the database
-reference_spectra_ids = get_all_ids()
+# reference_spectra_ids = get_all_ids() ##UNCOMMENT BACK AGAIN ASAP
 
-def get_spectrum_data(material_id):
+def get_spectrum_data(material_id,db_file_path=db_file_path):
     """Retrieve spectrum data for a specific material from the database.
     
     This function fetches the intensity values, wave numbers, and associated comment
@@ -124,7 +124,63 @@ def get_spectrum_data(material_id):
     comment = comments[0] if comments else ''
     return list(intensities), list(wave_numbers), comment
 
+#print(get_spectrum_data("Acrylic 2. Red Yarn"))
 
+# now we make a function that gets the spectrum data, but the wavenumbers have to be integers (maybe floats but wiht.0 as decimal place)
+# make this with connecting the datapoints linearly and then just resampling to get integer wavenumbers
+
+def get_spectrum_data_integer_wavenumbers(material_id,db_file_path=db_file_path):
+    """Retrieve spectrum data with integer wave numbers for a specific material from the database.
+    
+    This function fetches the intensity values and wave numbers for a given material ID,
+    then interpolates the data to ensure that wave numbers are integers. This is useful
+    for analyses that require integer wave numbers.
+    
+    Args:
+        material_id (str): The ID of the material to fetch spectrum data for
+    Returns:
+        tuple: A tuple containing two elements:
+            - list of intensity values
+            - list of corresponding integer wave numbers
+    """
+    intensities, wave_numbers, _ = get_spectrum_data(material_id,   db_file_path)
+
+    if not intensities or not wave_numbers:
+        return [], []
+
+    # Create a new range of integer wave numbers
+    min_wave = int(np.ceil(min(wave_numbers)))
+    max_wave = int(np.floor(max(wave_numbers)))
+    integer_wave_numbers = list(range(min_wave, max_wave + 1))
+
+    # Interpolate intensities to the new integer wave numbers
+    
+    interpolated_intensities = np.interp(integer_wave_numbers, wave_numbers, intensities)
+
+    return list(interpolated_intensities), integer_wave_numbers
+'''
+print(get_spectrum_data_integer_wavenumbers("Acrylic 2. Red Yarn"))
+
+# now plot both - create a zoom of ~10 datapoints, highlight points, and plot integer-resampled points as markers only
+material_id = "Acrylic 2. Red Yarn"
+intensities, wave_numbers, _ = get_spectrum_data(material_id)
+intensities_int, wave_numbers_int = get_spectrum_data_integer_wavenumbers(material_id)
+
+    
+# remove the agg use for plt 
+matplotlib.use('TkAgg')  # Use interactive backend for plotting
+plt.figure(figsize=(10, 5))
+intensities, wave_numbers, _ = get_spectrum_data("Acrylic 2. Red Yarn")
+plt.plot(wave_numbers, intensities, label='Original Spectrum'    )
+intensities_int, wave_numbers_int = get_spectrum_data_integer_wavenumbers("Acrylic 2. Red Yarn")
+plt.plot(wave_numbers_int, intensities_int, label='Integer Wavenumbers Spectrum',linestyle='--')
+
+plt.xlabel('Wavenumber [cm⁻¹]')
+plt.ylabel('Intensity')
+plt.title('Spectrum with Original and Integer Wavenumbers')
+plt.legend(loc='lower left')
+plt.show()
+'''
 def normalize_data(intensities):
     """Normalize intensity values to a range of 0 to 1.
     
