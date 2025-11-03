@@ -20,13 +20,13 @@ import torch
 # Replace single global with a default constant (keeps backward compatibility)
 default_height_threshold = 0.25  # default threshold for peak detection
 
-db_file_path = 'app/database/microplastics_reference.db'  # Path to SQLite database
+reference_db_file_path = 'app/database/microplastics_reference.db'  # Path to SQLite database
 
 # Simple cache for spectrum data
 spectrum_data_cache = {}
 
 @functools.lru_cache(maxsize=32)
-def get_comment(material_id):
+def get_comment(material_id,db_file_path=reference_db_file_path):
     """Get just the comment for a material ID - much faster than retrieving the full spectrum.
     
     This function uses LRU caching to store up to 32 most recently accessed comments in memory,
@@ -45,7 +45,7 @@ def get_comment(material_id):
     conn.close()
     return result[0] if result and result[0] else ''
 
-def get_all_comments():
+def get_all_comments(db_file_path=reference_db_file_path):
     """Get all material IDs and their comments in a single database query.
     This is much more efficient than making separate queries for each ID.
     
@@ -67,7 +67,7 @@ def get_all_comments():
     comments_dict = {row[0]: row[1] if row[1] and row[1] != 'None' else '' for row in results}
     return comments_dict
 
-def get_all_ids(db_file_path=db_file_path):
+def get_all_ids(db_file_path=reference_db_file_path):
     """Retrieve all unique material IDs from the microplastics database.
     
     This function makes a database query to fetch all distinct material IDs from
@@ -89,8 +89,9 @@ def get_all_ids(db_file_path=db_file_path):
 
 # Set reference_spectra_ids with all IDs from the database
 # reference_spectra_ids = get_all_ids() ##UNCOMMENT BACK AGAIN ASAP
+#left commented just in case but i put this on each function that needs it now
 
-def get_spectrum_data(material_id,db_file_path=db_file_path):
+def get_spectrum_data(material_id,db_file_path=reference_db_file_path):
     """Retrieve spectrum data for a specific material from the database.
     
     This function fetches the intensity values, wave numbers, and associated comment
@@ -129,7 +130,7 @@ def get_spectrum_data(material_id,db_file_path=db_file_path):
 # now we make a function that gets the spectrum data, but the wavenumbers have to be integers (maybe floats but wiht.0 as decimal place)
 # make this with connecting the datapoints linearly and then just resampling to get integer wavenumbers
 
-def get_spectrum_data_integer_wavenumbers(material_id,db_file_path=db_file_path):
+def get_spectrum_data_integer_wavenumbers(material_id,db_file_path=reference_db_file_path):
     """Retrieve spectrum data with integer wave numbers for a specific material from the database.
     
     This function fetches the intensity values and wave numbers for a given material ID,
@@ -319,7 +320,7 @@ def calculate_similarity2(sample_peaks, height_threshold=default_height_threshol
     """
     similarities = {}
     window = 35  # Wavelength window size for peak matching (±25 cm⁻¹)
-
+    reference_spectra_ids = get_all_ids()
     for name in reference_spectra_ids:
         #Use pre-calculated peaks from the database for efficiency
         ref_peaks = get_peaks(name, height_threshold=height_threshold)
@@ -380,7 +381,7 @@ def calculate_similarity(sample_peaks, height_threshold=default_height_threshold
     similarities = {}
     window = 35  # Wavelength window size for peak matching (± cm⁻¹)
     sigma = window / 2.0  # Spread for Gaussian weighting
-
+    reference_spectra_ids = get_all_ids()
     for name in reference_spectra_ids:
         ref_peaks = get_peaks(name, height_threshold=height_threshold)
         match_scores = []
@@ -438,7 +439,7 @@ def generate_plots(height_threshold=default_height_threshold):
     # Start timing
     start_time = time.time()
     plot_count = 0
-    
+    reference_spectra_ids = get_all_ids()
     for material_id in reference_spectra_ids:
         intensities, wavelengths, comment = get_spectrum_data(material_id)
 
@@ -519,7 +520,7 @@ def process_uploaded_file(file):
     df = pd.read_csv(file)
     return df
 
-def add_sample_to_bank(sample_id, intensities, wave_numbers, best_match, similarity_score):
+def add_sample_to_bank(sample_id, intensities, wave_numbers, best_match, similarity_score,db_file_path=reference_db_file_path):
     """Add a processed sample spectrum to the sample bank database.
     
     This function stores a processed sample spectrum in the database for future reference.
@@ -552,7 +553,7 @@ def add_sample_to_bank(sample_id, intensities, wave_numbers, best_match, similar
     finally:
         conn.close()
 
-def get_sample_data(sample_id):
+def get_sample_data(sample_id,db_file_path=reference_db_file_path):
     """Retrieve spectrum data for a specific sample from the sample bank.
     
     This function fetches intensity and wave number data for a previously processed
@@ -736,7 +737,7 @@ def save_to_csv(intensities, wavenumbers, filename='output.csv'):
     # Save to CSV
     df.to_csv(filename, index=False)
 
-def get_peaks(material_id, height_threshold=default_height_threshold):
+def get_peaks(material_id, height_threshold=default_height_threshold,db_file_path=reference_db_file_path):
     """Retrieve pre-calculated peaks for a specific material from the reference_peaks table.
     Now accepts height_threshold to filter peaks returned from the DB.
     

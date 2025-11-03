@@ -111,6 +111,7 @@ def library():
 
     # Fetch all comments
     comments = {}
+    reference_spectra_ids = get_all_ids()
     for material_id in reference_spectra_ids:
         _, _, comment = get_spectrum_data(material_id)
         comments[material_id] = comment

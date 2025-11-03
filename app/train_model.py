@@ -62,6 +62,8 @@ dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
 # Initialize the model, loss function, and optimizer
 num_classes = len(set(label_list))  # Assuming labels are from 0 to num_classes
 model = SpectrumClassifier(num_classes)
+
+
 criterion = torch.nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 # Training loop
@@ -78,6 +80,8 @@ for epoch in range(num_epochs):
         optimizer.step()
     print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {loss.item():.4f}')
 # Save the trained model
+
+
 model_cache_dir = 'app/model_cache'
 os.makedirs(model_cache_dir, exist_ok=True)
 model_path = os.path.join(model_cache_dir, 'model.pth') 
