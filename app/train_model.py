@@ -42,17 +42,48 @@ import os
 #import utils
 import utils as utils
 # Define the path to your database
-db_file_path = 'app/database/microplastics_reference.db'
+db_file_path = 'database/microplastics_reference.db'
 
-sample_ids=utils.get_all_ids("database/microplastics_reference.db")
+
+sample_ids=utils.get_all_ids("app/database/microplastics_reference.db")
 
 data_list=[]
 label_list=[]
+wavenumber_lens=set()
+min_wavenumber_sample=set()
+max_wavenumber_sample=set()
+print(f"Total samples found: {len(sample_ids)}")
+print("Fetching spectrum data...")
+print(sample_ids)
+print(label_list)
+print(data_list)
+
 for sample_id in sample_ids:
-    intensities, wave_numbers = utils.get_spectrum_data_integer_wavenumbers(sample_id,"database/microplastics_reference.db")
+    print(f"Processing sample ID: {sample_id}")
+    intensities, wave_numbers = utils.get_spectrum_data_integer_wavenumbers(sample_id)
+    print(f"Intensities length: {len(intensities)}")
+    print(f"Wave numbers length: {len(wave_numbers)}")
+    wavenumber_lens.add(len(wave_numbers))
+    min_wavenumber_sample.add(min(wave_numbers))
+    max_wavenumber_sample.add(max(wave_numbers))
+    print(f"Intensities sample: {intensities[:10]}")
+    print(f"Wave numbers sample: {wave_numbers[:10]}")
     label=sample_id
     data_list.append(intensities)
-    label_list.append(label)    
+    label_list.append(label)
+    
+print(f"Wavenumber lengths found: {wavenumber_lens}")
+print("max wavenumber length:", max(wavenumber_lens))
+print(f"wavenumber min ")
+print(f"Min wavenumber samples: {min_wavenumber_sample}")
+print(f"Max wavenumber samples: {max_wavenumber_sample}")
+
+boundaries=(min(min_wavenumber_sample), max(max_wavenumber_sample))
+print(f"Overall wavenumber boundaries: {boundaries}")
+
+# Pad data to have uniform length
+# when missing datapoints, we pad with zeros at the end
+target_length = max(wavenumber_lens)
 # Convert lists to tensors
 data_tensor = torch.tensor(data_list, dtype=torch.float32).unsqueeze(1)  # Add channel dimension
 label_tensor = torch.tensor(label_list, dtype=torch.long)
