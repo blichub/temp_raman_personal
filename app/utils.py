@@ -1,58 +1,69 @@
 import matplotlib
-matplotlib.use('Agg')  # Use non-interactive backend for web applications
+
+matplotlib.use("Agg")  # Use non-interactive backend for web applications
 import matplotlib.pyplot as plt
 import os
 from scipy.signal import find_peaks
-from scipy.ndimage import minimum_filter #for Rolling Ball (or Morphological) Baseline Correction
-from scipy.signal import savgol_filter #for smoothing algorithm
+from scipy.ndimage import (
+    minimum_filter,
+)  # for Rolling Ball (or Morphological) Baseline Correction
+from scipy.signal import savgol_filter  # for smoothing algorithm
 import sqlite3
 import numpy as np
-from numpy.polynomial.polynomial import Polynomial #for polynomial fitting algorithm
+from numpy.polynomial.polynomial import Polynomial  # for polynomial fitting algorithm
 import pandas as pd
-import pywt #for wavelet algorithm
+import pywt  # for wavelet algorithm
 import functools
-#import pytorch to substitute the peak detection algorithm
-import torch
-#from models.spectrum_model import SpectrumClassifier
+import json
 
+# import pytorch to substitute the peak detection algorithm
+import torch
+
+# from models.spectrum_model import SpectrumClassifier
 
 
 # Replace single global with a default constant (keeps backward compatibility)
 default_height_threshold = 0.25  # default threshold for peak detection
 
-reference_db_file_path = 'app/database/microplastics_reference.db'  # Path to SQLite database
+reference_db_file_path = (
+    "app/database/microplastics_reference.db"  # Path to SQLite database
+)
 
 # Simple cache for spectrum data
 spectrum_data_cache = {}
 
+
 @functools.lru_cache(maxsize=32)
-def get_comment(material_id,db_file_path=reference_db_file_path):
+def get_comment(material_id, db_file_path=reference_db_file_path):
     """Get just the comment for a material ID - much faster than retrieving the full spectrum.
-    
+
     This function uses LRU caching to store up to 32 most recently accessed comments in memory,
     which significantly improves performance when comments are accessed repeatedly.
-    
+
     Args:
         material_id (str): The ID of the material to fetch the comment for
-        
+
     Returns:
         str: The comment associated with the material, or empty string if none exists
     """
     conn = sqlite3.connect(db_file_path)
     cursor = conn.cursor()
-    cursor.execute("SELECT DISTINCT Comment FROM microplastics WHERE ID=? LIMIT 1", (material_id,))
+    cursor.execute(
+        "SELECT DISTINCT Comment FROM microplastics WHERE ID=? LIMIT 1", (material_id,)
+    )
     result = cursor.fetchone()
     conn.close()
-    return result[0] if result and result[0] else ''
+    return result[0] if result and result[0] else ""
+
 
 def get_all_comments(db_file_path=reference_db_file_path):
     """Get all material IDs and their comments in a single database query.
     This is much more efficient than making separate queries for each ID.
-    
+
     This function makes a single database connection and query to fetch all comments at once,
     which is significantly faster than fetching each comment individually, especially when
     there are many materials in the database.
-    
+
     Returns:
         dict: A dictionary mapping material IDs to their comments, with empty strings for
               materials that have no comment or 'None' as a comment
@@ -62,18 +73,21 @@ def get_all_comments(db_file_path=reference_db_file_path):
     cursor.execute("SELECT DISTINCT ID, Comment FROM microplastics")
     results = cursor.fetchall()
     conn.close()
-    
+
     # Convert to a dictionary for easy lookup
-    comments_dict = {row[0]: row[1] if row[1] and row[1] != 'None' else '' for row in results}
+    comments_dict = {
+        row[0]: row[1] if row[1] and row[1] != "None" else "" for row in results
+    }
     return comments_dict
+
 
 def get_all_ids(db_file_path=reference_db_file_path):
     """Retrieve all unique material IDs from the microplastics database.
-    
+
     This function makes a database query to fetch all distinct material IDs from
     the microplastics reference database. These IDs are used throughout the application
     to identify different reference materials.
-    
+
     Returns:
         list: A list of all unique material IDs in the database
     """
@@ -87,20 +101,22 @@ def get_all_ids(db_file_path=reference_db_file_path):
     all_ids = [row[0] for row in rows]
     return all_ids
 
+
 # Set reference_spectra_ids with all IDs from the database
 # reference_spectra_ids = get_all_ids() ##UNCOMMENT BACK AGAIN ASAP
-#left commented just in case but i put this on each function that needs it now
+# left commented just in case but i put this on each function that needs it now
 
-def get_spectrum_data(material_id,db_file_path=reference_db_file_path):
+
+def get_spectrum_data(material_id, db_file_path=reference_db_file_path):
     """Retrieve spectrum data for a specific material from the database.
-    
+
     This function fetches the intensity values, wave numbers, and associated comment
     for a given material ID from the microplastics database. The data is used for
     spectrum analysis and visualization.
-    
+
     Args:
         material_id (str): The ID of the material to fetch spectrum data for
-        
+
     Returns:
         tuple: A tuple containing three elements:
             - list of intensity values
@@ -109,34 +125,41 @@ def get_spectrum_data(material_id,db_file_path=reference_db_file_path):
     """
     conn = sqlite3.connect(db_file_path)
     cursor = conn.cursor()
-    cursor.execute("SELECT Intensity, WaveNumber, Comment FROM microplastics WHERE ID=?", (material_id,))
+    cursor.execute(
+        "SELECT Intensity, WaveNumber, Comment FROM microplastics WHERE ID=?",
+        (material_id,),
+    )
     rows = cursor.fetchall()
     conn.close()
 
     if not rows:
-        return [], [], ''
+        return [], [], ""
 
     # Extract intensities and wave numbers from the query result
     intensities, wave_numbers = zip(*[(row[0], row[1]) for row in rows])
 
     # Extract comments, default to empty string if none present
-    comments = [row[2] if len(row) > 2 else '' for row in rows]
+    comments = [row[2] if len(row) > 2 else "" for row in rows]
     # Assuming the comment is the same for all entries of a material_id, take the first one
-    comment = comments[0] if comments else ''
+    comment = comments[0] if comments else ""
     return list(intensities), list(wave_numbers), comment
 
-#print(get_spectrum_data("Acrylic 2. Red Yarn"))
+
+# print(get_spectrum_data("Acrylic 2. Red Yarn"))
 
 # now we make a function that gets the spectrum data, but the wavenumbers have to be integers (maybe floats but wiht.0 as decimal place)
 # make this with connecting the datapoints linearly and then just resampling to get integer wavenumbers
 
-def get_spectrum_data_integer_wavenumbers(material_id,db_file_path=reference_db_file_path):
+
+def get_spectrum_data_integer_wavenumbers(
+    material_id, db_file_path=reference_db_file_path
+):
     """Retrieve spectrum data with integer wave numbers for a specific material from the database.
-    
+
     This function fetches the intensity values and wave numbers for a given material ID,
     then interpolates the data to ensure that wave numbers are integers. This is useful
     for analyses that require integer wave numbers.
-    
+
     Args:
         material_id (str): The ID of the material to fetch spectrum data for
     Returns:
@@ -144,7 +167,7 @@ def get_spectrum_data_integer_wavenumbers(material_id,db_file_path=reference_db_
             - list of intensity values
             - list of corresponding integer wave numbers
     """
-    intensities, wave_numbers, _ = get_spectrum_data(material_id,   db_file_path)
+    intensities, wave_numbers, _ = get_spectrum_data(material_id, db_file_path)
 
     if not intensities or not wave_numbers:
         return [], []
@@ -155,11 +178,15 @@ def get_spectrum_data_integer_wavenumbers(material_id,db_file_path=reference_db_
     integer_wave_numbers = list(range(min_wave, max_wave + 1))
 
     # Interpolate intensities to the new integer wave numbers
-    
-    interpolated_intensities = np.interp(integer_wave_numbers, wave_numbers, intensities)
+
+    interpolated_intensities = np.interp(
+        integer_wave_numbers, wave_numbers, intensities
+    )
 
     return list(interpolated_intensities), integer_wave_numbers
-'''
+
+
+"""
 print(get_spectrum_data_integer_wavenumbers("Acrylic 2. Red Yarn"))
 
 # now plot both - create a zoom of ~10 datapoints, highlight points, and plot integer-resampled points as markers only
@@ -181,81 +208,166 @@ plt.ylabel('Intensity')
 plt.title('Spectrum with Original and Integer Wavenumbers')
 plt.legend(loc='lower left')
 plt.show()
-'''
+"""
+
+
 def normalize_data(intensities):
     """Normalize intensity values to a range of 0 to 1.
-    
+
     This function scales all intensity values by dividing by the maximum intensity,
     which ensures all values are between 0 and 1. Normalization is important for
     comparing spectra with different absolute intensity scales.
-    
+
     Args:
         intensities (list): List of intensity values to normalize
-        
+
     Returns:
         list: Normalized intensity values, where the maximum value is 1.0
     """
     max_intensity = max(intensities)
     return [i / max_intensity for i in intensities]
 
+
 # after file processing and baseline correction is done, we can either do the peak identification method or the neural network method
 
-#The neural network method aims to classify into each sample of the reference spectra, and has a first convolutional layer, a max pooling layer, a second convolutional layer, another max pooling layer, and finally a fully connected layer that outputs the class probabilities.
+
+# The neural network method aims to classify into each sample of the reference spectra, and has a first convolutional layer, a max pooling layer, a second convolutional layer, another max pooling layer, and finally a fully connected layer that outputs the class probabilities.
 def neural_network_process_spectrum(intensities, wavelengths):
     """Process a spectrum using a neural network to identify material.
-    
+
     This function uses a pre-trained neural network model to classify the input
     spectrum into one of the reference materials. The model processes the intensity
     values and outputs the predicted material ID.
-    
+
     Args:
         intensities (list): List of intensity values for the spectrum
         wavelengths (list): List of corresponding wave numbers for each intensity value
     Returns:
         str: Predicted material ID based on the neural network classification
     """
-    # Load the pre-trained model (ensure the model file is in the correct path)
-    model_path = 'app/models/spectrum_classifier.pth'
-    if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Model file not found at {model_path}")
+    # Prefer the irregular-grid transformer (handles variable wavenumbers)
+    try:
+        model, idx_to_class = load_irregular_model()
+        # Normalize intensities to max=1 to match training preprocessing
+        intensities = np.asarray(intensities, dtype=np.float32)
+        max_i = max(float(intensities.max()), 1e-6)
+        intensities = intensities / max_i
+        predicted_material_id, _ = predict_irregular(
+            wavelengths, intensities, model=model, idx_to_class=idx_to_class
+        )
+        return predicted_material_id
+    except FileNotFoundError:
+        # Fallback to legacy CNN path if irregular model is missing
+        model_path = "app/models/spectrum_classifier.pth"
+        model = torch.load(model_path)
+        model.eval()
 
-    model = torch.load(model_path)
-    model.eval()
+        input_data = np.array(intensities, dtype=np.float32)
+        input_data = (input_data - np.mean(input_data)) / np.std(
+            input_data
+        )  # Standardize
+        input_tensor = (
+            torch.tensor(input_data).unsqueeze(0).unsqueeze(0)
+        )  # Add batch and channel dimensions
 
-    # Prepare the input data for the model
-    input_data = np.array(intensities, dtype=np.float32)
-    input_data = (input_data - np.mean(input_data)) / np.std(input_data)  # Standardize
-    input_tensor = torch.tensor(input_data).unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
+        with torch.no_grad():
+            output = model(input_tensor)
+            predicted_class = torch.argmax(output, dim=1).item()
 
-    # Perform inference
-    with torch.no_grad():
-        output = model(input_tensor)
-        predicted_class = torch.argmax(output, dim=1).item()
-
-    # Map the predicted class index to material ID
-    if predicted_class < len(reference_spectra_ids):
-        predicted_material_id = reference_spectra_ids[predicted_class]
-    else:
-        predicted_material_id = "Unknown"
-
-    return predicted_material_id
+        reference_spectra_ids = get_all_ids()
+        if predicted_class < len(reference_spectra_ids):
+            return reference_spectra_ids[predicted_class]
+        return "Unknown"
 
     # It is best practice to define your neural network model in a separate file, such as app/models/spectrum_model.py.
     # This keeps your model architecture organized and separate from utility functions.
     # You can then import your model class in utils.py when needed.
 
-def process_spectrum(intensities, wavelengths, height_threshold=default_height_threshold):
+
+# ---- Irregular-grid inference helpers ----
+def load_irregular_model(
+    model_path="app/model_cache/irregular_spectrum_classifier.pth",
+    class_map_path="app/model_cache/irregular_class_map.json",
+    config_path="app/model_cache/irregular_config.json",
+):
+    """Load the irregular-grid transformer model and id mappings."""
+    from app.models.spectrum_model import IrregularSpectrumClassifier
+    from app.models.irregular_config import MODEL_CFG as DEFAULT_MODEL_CFG
+
+    with open(class_map_path, "r") as f:
+        class_to_idx = json.load(f)
+    idx_to_class = {v: k for k, v in class_to_idx.items()}
+
+    # Default to shared hyperparameters; override if config exists.
+    model_cfg = dict(DEFAULT_MODEL_CFG)
+    if os.path.exists(config_path):
+        with open(config_path, "r") as f:
+            model_cfg.update(json.load(f))
+
+    model = IrregularSpectrumClassifier(
+        num_classes=len(class_to_idx),
+        d_model=model_cfg["d_model"],
+        nhead=model_cfg["nhead"],
+        nlayers=model_cfg["nlayers"],
+        num_freqs=model_cfg["num_freqs"],
+    )
+    state = torch.load(model_path, map_location="cpu")
+    model.load_state_dict(state)
+    model.eval()
+    return model, idx_to_class
+
+
+def predict_irregular(wn, intensity, model=None, idx_to_class=None):
+    """
+    Predict class for a single irregular-grid spectrum.
+    wn, intensity: 1D sequences with equal length (list/np/tensor).
+    Returns (predicted_class_id, logits_tensor).
+    """
+    import numpy as np
+    from app.models.spectrum_model import collate_irregular
+
+    if model is None or idx_to_class is None:
+        model, idx_to_class = load_irregular_model()
+
+    wn = np.asarray(wn, dtype=np.float32)
+    intensity = np.asarray(intensity, dtype=np.float32)
+    order = np.argsort(wn)
+    wn = wn[order]
+    intensity = intensity[order]
+
+    max_i = max(float(intensity.max()), 1e-6)
+    intensity = intensity / max_i
+
+    batch = [
+        {
+            "wn": torch.tensor(wn).float(),
+            "intensity": torch.tensor(intensity).float(),
+            "label": 0,  # dummy
+        }
+    ]
+    x_wn, y_i, mask, _ = collate_irregular(batch, pad_value=0.0)
+
+    with torch.no_grad():
+        logits = model(x_wn, y_i, key_padding_mask=mask)
+        pred_idx = torch.argmax(logits, dim=1).item()
+
+    return idx_to_class[pred_idx], logits
+
+
+def process_spectrum(
+    intensities, wavelengths, height_threshold=default_height_threshold
+):
     """Process a spectrum by identifying significant peaks.
-    
+
     This function detects peaks in the spectrum data that exceed the defined height
     threshold. These peaks are characteristic features used for material identification
     and spectrum comparison.
-    
+
     Args:
         intensities (list): List of intensity values to normalize
         wavelengths (list): List of corresponding wave numbers for each intensity value
         height_threshold (float, optional): user specified eight threshold for peak detection. Defaults to default_height_threshold.
-        
+
     Returns:
         list: List of tuples, where each tuple contains (wavelength, intensity) for each detected peak
     """
@@ -265,14 +377,23 @@ def process_spectrum(intensities, wavelengths, height_threshold=default_height_t
 
     return list(zip(peak_wavelengths, peak_intensities))
 
-def plot_spectrum(wavelengths, intensities, peaks, title, filename, directory='app/plots', height_threshold=default_height_threshold):
+
+def plot_spectrum(
+    wavelengths,
+    intensities,
+    peaks,
+    title,
+    filename,
+    directory="app/plots",
+    height_threshold=default_height_threshold,
+):
     """Generate and save a plot of a spectrum with detected peaks.
     Accepts height_threshold to draw the detection threshold on the plot.
-    
+
     This function creates a visualization of the spectrum data, highlighting detected peaks
-    and the threshold used for peak detection. The plot is saved as an image file in the 
+    and the threshold used for peak detection. The plot is saved as an image file in the
     specified directory.
-    
+
     Args:
         wavelengths (list): List of wave numbers for the spectrum
         intensities (list): List of corresponding intensity values
@@ -289,30 +410,31 @@ def plot_spectrum(wavelengths, intensities, peaks, title, filename, directory='a
 
     plt.figure(figsize=(10, 5))
     plt.plot(wavelengths, intensities, label=title)
-    plt.scatter(peak_wavelengths, peak_intensities, color='red', label='Peaks')
-    plt.axhline(y=height_threshold, color='green', linestyle='--', label='Threshold')
-    plt.xlabel('Wavenumber [/cm]')
-    plt.ylabel('Intensity')
-    plt.title(f'{title} Spectrum with Peaks')
+    plt.scatter(peak_wavelengths, peak_intensities, color="red", label="Peaks")
+    plt.axhline(y=height_threshold, color="green", linestyle="--", label="Threshold")
+    plt.xlabel("Wavenumber [/cm]")
+    plt.ylabel("Intensity")
+    plt.title(f"{title} Spectrum with Peaks")
     plt.legend()
     plt.tight_layout()
-    plt.savefig(f'{directory}/{filename}')
+    plt.savefig(f"{directory}/{filename}")
     plt.close()
+
 
 def calculate_similarity2(sample_peaks, height_threshold=default_height_threshold):
     """Calculate similarity between a sample spectrum and all reference spectra.
     Pass height_threshold to get_peaks() so pre-calculated peaks are filtered accordingly.
-    
-    This function compares the peaks of a sample spectrum with all reference spectra in the 
-    database to find the best match. For each reference spectrum, it calculates similarity 
-    scores based on the position and intensity of peaks within a specified window. The 
-    similarity calculation weighs peak position differences more heavily (80%) than 
+
+    This function compares the peaks of a sample spectrum with all reference spectra in the
+    database to find the best match. For each reference spectrum, it calculates similarity
+    scores based on the position and intensity of peaks within a specified window. The
+    similarity calculation weighs peak position differences more heavily (80%) than
     intensity differences (20%).
-    
+
     Args:
         sample_peaks (list): List of detected peaks in the sample spectrum as (wavelength, intensity) tuples
         height_threshold (float, optional): Height threshold for peak detection. Defaults to default_height_threshold.
-        
+
     Returns:
         tuple: A tuple containing:
             - dict: Dictionary mapping reference material IDs to their similarity scores
@@ -322,7 +444,7 @@ def calculate_similarity2(sample_peaks, height_threshold=default_height_threshol
     window = 35  # Wavelength window size for peak matching (±25 cm⁻¹)
     reference_spectra_ids = get_all_ids()
     for name in reference_spectra_ids:
-        #Use pre-calculated peaks from the database for efficiency
+        # Use pre-calculated peaks from the database for efficiency
         ref_peaks = get_peaks(name, height_threshold=height_threshold)
 
         similarity_scores = []
@@ -339,7 +461,9 @@ def calculate_similarity2(sample_peaks, height_threshold=default_height_threshol
 
                 # Check if the reference peak is within the specified window
                 if abs(sample_wavenumber - ref_wavenumber) <= window:
-                    position_diff = abs(sample_wavenumber - ref_wavenumber) / ref_wavenumber
+                    position_diff = (
+                        abs(sample_wavenumber - ref_wavenumber) / ref_wavenumber
+                    )
                     intensity_diff = abs(sample_peak[1] - ref_intensity) / ref_intensity
 
                     # Calculate similarity with 80% weight on position and 20% on intensity
@@ -363,18 +487,19 @@ def calculate_similarity2(sample_peaks, height_threshold=default_height_threshol
     best_match = max(similarities, key=similarities.get) if similarities else None
     return similarities, best_match
 
+
 def calculate_similarity(sample_peaks, height_threshold=default_height_threshold):
     """Calculate similarity using a weighted match score with Gaussian weighting.
     Pass height_threshold to get_peaks() so pre-calculated peaks are filtered accordingly.
-    
+
     This method compares sample peaks to reference spectra using a similarity score
     that favors close peak positions and similar intensities. Position differences
     are evaluated using a Gaussian function and intensity using a ratio.
-    
+
     Args:
         sample_peaks (list): List of (wavenumber, intensity) tuples from the sample spectrum.
         height_threshold (float, optional): Height threshold for peak detection. Defaults to default_height_threshold.
-        
+
     Returns:
         tuple: (dict of similarity scores per reference ID, best matching reference ID)
     """
@@ -395,11 +520,13 @@ def calculate_similarity(sample_peaks, height_threshold=default_height_threshold
                 # Only consider matches within the window
                 if abs(position_diff) <= window:
                     # Gaussian weight for position
-                    position_weight = np.exp(- (position_diff ** 2) / (2 * sigma ** 2))
+                    position_weight = np.exp(-(position_diff**2) / (2 * sigma**2))
 
                     # Intensity similarity (bounded ratio)
                     if ref_intensity > 0 and sample_intensity > 0:
-                        intensity_similarity = min(sample_intensity, ref_intensity) / max(sample_intensity, ref_intensity)
+                        intensity_similarity = min(
+                            sample_intensity, ref_intensity
+                        ) / max(sample_intensity, ref_intensity)
                     else:
                         intensity_similarity = 0
 
@@ -425,17 +552,17 @@ def calculate_similarity(sample_peaks, height_threshold=default_height_threshold
 def generate_plots(height_threshold=default_height_threshold):
     """Generate spectral plots for all reference materials in the database.
     Accepts height_threshold so plotted threshold and peak query use the provided value.
-    
+
     This function creates visualizations for all reference spectra in the database,
     identifying peaks in each spectrum and saving the plots to the plots directory.
     The function includes timing measurements to track performance and outputs
     progress information to the console.
-    
+
     Returns:
         float: Total time taken to generate all plots in seconds
     """
     import time
-    
+
     # Start timing
     start_time = time.time()
     plot_count = 0
@@ -452,35 +579,40 @@ def generate_plots(height_threshold=default_height_threshold):
             intensities,
             get_peaks(material_id, height_threshold=height_threshold),
             material_id,
-            f'{material_id}_with_peaks.png',
-            height_threshold=height_threshold
+            f"{material_id}_with_peaks.png",
+            height_threshold=height_threshold,
         )
         plot_count += 1
-        
+
         # Print progress every 10 plots
         if plot_count % 10 == 0:
             current_time = time.time() - start_time
-            print(f"Generated {plot_count}/{len(reference_spectra_ids)} plots in {current_time:.2f} seconds")
-    
+            print(
+                f"Generated {plot_count}/{len(reference_spectra_ids)} plots in {current_time:.2f} seconds"
+            )
+
     # Calculate total time
     total_time = time.time() - start_time
     print(f"All {plot_count} plots generated and saved in {total_time:.2f} seconds")
-    
+
     return total_time
 
-def process_and_plot_sample(file, sample_id="Sample", height_threshold=default_height_threshold):
+
+def process_and_plot_sample(
+    file, sample_id="Sample", height_threshold=default_height_threshold
+):
     """Process an uploaded sample file, detect peaks, and generate a plot.
     Accepts user-specified height_threshold for peak detection and plotting.
-    
+
     This function takes an uploaded spectrum file, extracts the intensity and wavelength data,
-    normalizes the intensities, identifies peaks, and generates a plot visualizing the sample 
+    normalizes the intensities, identifies peaks, and generates a plot visualizing the sample
     spectrum with its detected peaks.
-    
+
     Args:
         file: The uploaded file containing spectrum data
         sample_id (str, optional): Identifier for the sample. Defaults to "Sample".
         height_threshold (float, optional): Height threshold for peak detection. Defaults to default_height_threshold.
-        
+
     Returns:
         tuple: A tuple containing:
             - list: Sample peaks as (wavelength, intensity) tuples
@@ -491,42 +623,62 @@ def process_and_plot_sample(file, sample_id="Sample", height_threshold=default_h
 
     wavelengths = df.iloc[:, 1].tolist()
     intensities = df.iloc[:, 0].tolist()
-    sample_peaks = process_spectrum(intensities, wavelengths, height_threshold=height_threshold)
+    sample_peaks = process_spectrum(
+        intensities, wavelengths, height_threshold=height_threshold
+    )
 
     max_intensity = max(intensities)
+    # Normalize intensities
     intensities = [i / max_intensity for i in intensities]
 
     peaks, _ = find_peaks(intensities, height=height_threshold)
     peak_wavelengths = [wavelengths[i] for i in peaks]
     peak_intensities = [intensities[i] for i in peaks]
 
-    plot_spectrum(wavelengths, intensities, list(zip(peak_wavelengths, peak_intensities)), sample_id, filename = f'sample_{sample_id}_with_peaks.png', directory='app/sample_plots', height_threshold=height_threshold)
+    plot_spectrum(
+        wavelengths,
+        intensities,
+        list(zip(peak_wavelengths, peak_intensities)),
+        sample_id,
+        filename=f"sample_{sample_id}_with_peaks.png",
+        directory="app/sample_plots",
+        height_threshold=height_threshold,
+    )
 
     return sample_peaks, peak_wavelengths, peak_intensities
 
+
 def process_uploaded_file(file):
     """Process an uploaded CSV file containing spectrum data.
-    
-    This function reads a CSV file containing Raman spectroscopy data and converts it 
-    to a pandas DataFrame for further processing. The file is expected to contain 
+
+    This function reads a CSV file containing Raman spectroscopy data and converts it
+    to a pandas DataFrame for further processing. The file is expected to contain
     intensity values and corresponding wave numbers.
-    
+
     Args:
         file: The uploaded CSV file
-        
+
     Returns:
         pandas.DataFrame: DataFrame containing the spectrum data
     """
     df = pd.read_csv(file)
     return df
 
-def add_sample_to_bank(sample_id, intensities, wave_numbers, best_match, similarity_score,db_file_path=reference_db_file_path):
+
+def add_sample_to_bank(
+    sample_id,
+    intensities,
+    wave_numbers,
+    best_match,
+    similarity_score,
+    db_file_path=reference_db_file_path,
+):
     """Add a processed sample spectrum to the sample bank database.
-    
+
     This function stores a processed sample spectrum in the database for future reference.
     It saves each data point (intensity and wave number) along with metadata about the
     sample, including its ID, best matching reference, and similarity score.
-    
+
     Args:
         sample_id (str): Identifier for the sample
         intensities (list): List of intensity values for the sample spectrum
@@ -539,10 +691,13 @@ def add_sample_to_bank(sample_id, intensities, wave_numbers, best_match, similar
         cursor = conn.cursor()
 
         for intensity, wave_number in zip(intensities, wave_numbers):
-            cursor.execute("""
+            cursor.execute(
+                """
                 INSERT INTO sample_bank (sample_id, intensity, wave_number, best_match, similarity_score)
                 VALUES (?, ?, ?, ?, ?)
-            """, (sample_id, intensity, wave_number, best_match, similarity_score))
+            """,
+                (sample_id, intensity, wave_number, best_match, similarity_score),
+            )
 
         conn.commit()
 
@@ -553,16 +708,17 @@ def add_sample_to_bank(sample_id, intensities, wave_numbers, best_match, similar
     finally:
         conn.close()
 
-def get_sample_data(sample_id,db_file_path=reference_db_file_path):
+
+def get_sample_data(sample_id, db_file_path=reference_db_file_path):
     """Retrieve spectrum data for a specific sample from the sample bank.
-    
+
     This function fetches intensity and wave number data for a previously processed
     and stored sample from the database. The data can be used for further analysis
     or visualization.
-    
+
     Args:
         sample_id (str): The ID of the sample to retrieve data for
-        
+
     Returns:
         tuple: A tuple containing:
             - list: Intensity values for the sample spectrum
@@ -570,7 +726,9 @@ def get_sample_data(sample_id,db_file_path=reference_db_file_path):
     """
     conn = sqlite3.connect(db_file_path)
     cursor = conn.cursor()
-    cursor.execute("SELECT intensity, wave_number FROM sample_bank WHERE sample_id=?", (sample_id,))
+    cursor.execute(
+        "SELECT intensity, wave_number FROM sample_bank WHERE sample_id=?", (sample_id,)
+    )
     rows = cursor.fetchall()
     conn.close()
 
@@ -579,6 +737,7 @@ def get_sample_data(sample_id,db_file_path=reference_db_file_path):
 
     intensities, wave_numbers = zip(*rows)
     return list(intensities), list(wave_numbers)
+
 
 def generate_sample_plots(sample_ids):
     for sample_id in sample_ids:
@@ -599,86 +758,158 @@ def generate_sample_plots(sample_ids):
             intensities,
             list(zip(peak_wavelengths, peak_intensities)),
             sample_id,
-            f'sample_{sample_id}_with_peaks.png',
-            directory='app/sample_plots'
+            f"sample_{sample_id}_with_peaks.png",
+            directory="app/sample_plots",
         )
 
     print("Sample plots generated and saved.")
 
-def plot_sample_with_reference(sample_id, sample_wavelengths, sample_intensities, ref_wavelengths, ref_intensities, match_id):
+
+def plot_sample_with_reference(
+    sample_id,
+    sample_wavelengths,
+    sample_intensities,
+    ref_wavelengths,
+    ref_intensities,
+    match_id,
+):
     plt.figure(figsize=(10, 5))
 
     # Plot the sample spectrum
-    plt.plot(sample_wavelengths, sample_intensities, label=f'Sample: {sample_id}')
+    plt.plot(sample_wavelengths, sample_intensities, label=f"Sample: {sample_id}")
 
     # Plot the matched reference spectrum in red dashed lines
-    plt.plot(ref_wavelengths, ref_intensities, 'r--', label=f'Match: {match_id} (Reference)')
+    plt.plot(
+        ref_wavelengths, ref_intensities, "r--", label=f"Match: {match_id} (Reference)"
+    )
 
-    plt.xlabel('Wavenumber [cm⁻¹]')
-    plt.ylabel('Normalized Intensity')
-    plt.title(f'Sample vs. Matched Reference')
+    plt.xlabel("Wavenumber [cm⁻¹]")
+    plt.ylabel("Normalized Intensity")
+    plt.title(f"Sample vs. Matched Reference")
     plt.legend()
 
     # Save the plot to a file
     # if directory sample plot does not exist, create it
-    if not os.path.exists('app/sample_plots'):
-        os.makedirs('app/sample_plots')
-    plot_file_path = f'app/sample_plots/sample_{sample_id}_with_match.png'
-    plot_file_path_to_render = f'sample_{sample_id}_with_match.png'
+    if not os.path.exists("app/sample_plots"):
+        os.makedirs("app/sample_plots")
+    plot_file_path = f"app/sample_plots/sample_{sample_id}_with_match.png"
+    plot_file_path_to_render = f"sample_{sample_id}_with_match.png"
     plt.savefig(plot_file_path)
     plt.close()
 
     return plot_file_path_to_render
 
-def process_and_compare_sample(file, sample_id, baseline_algorithm, baseline_param, matching_algorithm=None, matching_param=None, height_threshold=default_height_threshold):
+
+def process_and_compare_sample(
+    file,
+    sample_id,
+    baseline_algorithm,
+    baseline_param,
+    matching_algorithm=None,
+    matching_param=None,
+    height_threshold=default_height_threshold,
+):
     df = process_uploaded_file(file)
     sample_intensities = df.iloc[:, 0].tolist()
     sample_wavelengths = df.iloc[:, 1].tolist()
 
     # Baseline correction for sample data
     # Apply the chosen baseline correction algorithm
-    if baseline_algorithm == 'polynomial':
-        corrected_sample_intensities = baseline_polynomial(sample_intensities, degree=int(baseline_param))
+    if baseline_algorithm == "polynomial":
+        corrected_sample_intensities = baseline_polynomial(
+            sample_intensities, degree=int(baseline_param)
+        )
         normalized_sample_intensities = normalize_data(corrected_sample_intensities)
-    elif baseline_algorithm == 'rolling_ball':
-        corrected_sample_intensities = rolling_ball_baseline(sample_intensities, window_size=int(baseline_param))
+    elif baseline_algorithm == "rolling_ball":
+        corrected_sample_intensities = rolling_ball_baseline(
+            sample_intensities, window_size=int(baseline_param)
+        )
         normalized_sample_intensities = normalize_data(corrected_sample_intensities)
-    elif baseline_algorithm == 'wavelet':
-        corrected_sample_intensities = wavelet_baseline(sample_intensities, level=int(baseline_param))
+    elif baseline_algorithm == "wavelet":
+        corrected_sample_intensities = wavelet_baseline(
+            sample_intensities, level=int(baseline_param)
+        )
         normalized_sample_intensities = normalize_data(corrected_sample_intensities)
-    elif baseline_algorithm == 'derivative':
-        corrected_sample_intensities = derivative_baseline(sample_intensities, window_length=int(baseline_param))
+    elif baseline_algorithm == "derivative":
+        corrected_sample_intensities = derivative_baseline(
+            sample_intensities, window_length=int(baseline_param)
+        )
         normalized_sample_intensities = normalize_data(corrected_sample_intensities)
     else:
-        normalized_sample_intensities = normalize_data(sample_intensities) # No baseline correction applied
+        normalized_sample_intensities = normalize_data(
+            sample_intensities
+        )  # No baseline correction applied
 
-    # Calculate peaks and find the best match using the provided height_threshold
-    sample_peaks = process_spectrum(normalized_sample_intensities, sample_wavelengths, height_threshold=height_threshold)
-    results, best_match = calculate_similarity(sample_peaks, height_threshold=height_threshold)
+    if matching_algorithm == "neural_network":
+        # Predict via neural network (irregular transformer by default)
+        best_match = neural_network_process_spectrum(
+            normalized_sample_intensities, sample_wavelengths
+        )
+        results = {best_match: 1.0}  # single best match
 
-    # Get matched reference data
-    ref_intensities, ref_wavelengths, _ = get_spectrum_data(best_match)
+        # Get matched reference data
+        ref_intensities, ref_wavelengths, _ = get_spectrum_data(best_match)
+        normalized_ref_intensities = normalize_data(ref_intensities)
 
-    # Normalize reference data
-    normalized_ref_intensities = normalize_data(ref_intensities)
-    add_sample_to_bank(sample_id, normalized_sample_intensities, sample_wavelengths, best_match, best_match)
-    # Plot the sample with the matched reference
+        add_sample_to_bank(
+            sample_id,
+            normalized_sample_intensities,
+            sample_wavelengths,
+            best_match,
+            1.0,
+        )
 
-    plot_file = plot_sample_with_reference(
-        sample_id,
-        sample_wavelengths,
-        normalized_sample_intensities,
-        ref_wavelengths,
-        normalized_ref_intensities,
-        best_match
-    )
+        plot_file = plot_sample_with_reference(
+            sample_id,
+            sample_wavelengths,
+            normalized_sample_intensities,
+            ref_wavelengths,
+            normalized_ref_intensities,
+            best_match,
+        )
+
+    elif matching_algorithm == "peak_matching":
+        # Calculate peaks and find the best match using the provided height_threshold
+        sample_peaks = process_spectrum(
+            normalized_sample_intensities,
+            sample_wavelengths,
+            height_threshold=height_threshold,
+        )
+        results, best_match = calculate_similarity(
+            sample_peaks, height_threshold=height_threshold
+        )
+
+        # Get matched reference data
+        ref_intensities, ref_wavelengths, _ = get_spectrum_data(best_match)
+
+        # Normalize reference data
+        normalized_ref_intensities = normalize_data(ref_intensities)
+        add_sample_to_bank(
+            sample_id,
+            normalized_sample_intensities,
+            sample_wavelengths,
+            best_match,
+            best_match,
+        )
+        # Plot the sample with the matched reference
+
+        plot_file = plot_sample_with_reference(
+            sample_id,
+            sample_wavelengths,
+            normalized_sample_intensities,
+            ref_wavelengths,
+            normalized_ref_intensities,
+            best_match,
+        )
 
     return best_match, results, plot_file
 
+
 ###Removing Baseline algorithms
 
-#promissing try changing parameter
-#By fitting a polynomial to the data, you can estimate and subtract the baseline.
+
+# promissing try changing parameter
+# By fitting a polynomial to the data, you can estimate and subtract the baseline.
 # This approach is quite different from ALS and can be effective when the baseline behaves like a polynomial function.
 def baseline_polynomial(intensities, degree=3):
     indices = np.arange(len(intensities))
@@ -689,8 +920,9 @@ def baseline_polynomial(intensities, degree=3):
 
     return corrected_spectrum
 
-#most promissing try changing parameter or ebhance this
-#This method finds baselines as an envelope of the data using mathematical morphology operations,
+
+# most promissing try changing parameter or ebhance this
+# This method finds baselines as an envelope of the data using mathematical morphology operations,
 # suitable for baselines that need localization and aren't of polynomial form.
 def rolling_ball_baseline(intensities, window_size=50):
     baseline = minimum_filter(intensities, size=window_size)
@@ -698,9 +930,10 @@ def rolling_ball_baseline(intensities, window_size=50):
 
     return corrected_spectrum
 
-#Doesnt seem to work
-#Wavelet transforms can be used to decompose the signal and separate out low-frequency components considered as the baseline.
-def wavelet_baseline(intensities, wavelet='db3', level=1):
+
+# Doesnt seem to work
+# Wavelet transforms can be used to decompose the signal and separate out low-frequency components considered as the baseline.
+def wavelet_baseline(intensities, wavelet="db3", level=1):
     coeffs = pywt.wavedec(intensities, wavelet, level=level)
 
     # Set approximation coefficients to zero to remove baseline
@@ -708,14 +941,15 @@ def wavelet_baseline(intensities, wavelet='db3', level=1):
 
     baseline = pywt.waverec(coeffs, wavelet)
     if len(baseline) != len(intensities):
-        baseline = baseline[:len(intensities)]  # Adjust length if necessary
+        baseline = baseline[: len(intensities)]  # Adjust length if necessary
 
     corrected_spectrum = np.array(intensities) - baseline
 
     return corrected_spectrum
 
-#doesnt seem to work
-#This approach utilizes smoothing, followed by calculation of derivatives to approximate the baseline.
+
+# doesnt seem to work
+# This approach utilizes smoothing, followed by calculation of derivatives to approximate the baseline.
 def derivative_baseline(intensities, window_length=11, polyorder=2):
     smoothed = savgol_filter(intensities, window_length, polyorder)
     derivative = np.gradient(smoothed)  # First derivative
@@ -725,45 +959,50 @@ def derivative_baseline(intensities, window_length=11, polyorder=2):
     corrected_spectrum = np.array(intensities) - baseline
     return corrected_spectrum
 
+
 ###auxiliary function for troobleshooting
-def save_to_csv(intensities, wavenumbers, filename='output.csv'):
+def save_to_csv(intensities, wavenumbers, filename="output.csv"):
 
     # Create a DataFrame for easier CSV export
-    df = pd.DataFrame({
-        'Intensity': intensities,
-        'Wavenumber': wavenumbers
-    })
+    df = pd.DataFrame({"Intensity": intensities, "Wavenumber": wavenumbers})
 
     # Save to CSV
     df.to_csv(filename, index=False)
 
-def get_peaks(material_id, height_threshold=default_height_threshold,db_file_path=reference_db_file_path):
+
+def get_peaks(
+    material_id,
+    height_threshold=default_height_threshold,
+    db_file_path=reference_db_file_path,
+):
     """Retrieve pre-calculated peaks for a specific material from the reference_peaks table.
     Now accepts height_threshold to filter peaks returned from the DB.
-    
+
     This function fetches pre-calculated peak data from the reference_peaks table for a given
     material ID. It filters peaks based on the global height_threshold value and returns
     them in the same format as the process_spectrum function.
-    
+
     Args:
         material_id (str): The ID of the material to fetch peaks for
         height_threshold (float, optional): Height threshold for peak detection. Defaults to default_height_threshold.
-        
+
     Returns:
         list: List of tuples, where each tuple contains (wavelength, intensity) for each detected peak
               that exceeds the height threshold
     """
     conn = sqlite3.connect(db_file_path)
     cursor = conn.cursor()
-    
+
     # Query peaks from the reference_peaks table that exceed the height threshold
-    cursor.execute("SELECT wavenumber, intensity FROM reference_peaks WHERE microplastic_id=? AND intensity >= ?", 
-                  (material_id, float(height_threshold)))
+    cursor.execute(
+        "SELECT wavenumber, intensity FROM reference_peaks WHERE microplastic_id=? AND intensity >= ?",
+        (material_id, float(height_threshold)),
+    )
     rows = cursor.fetchall()
     conn.close()
-    
+
     if not rows:
         return []
-    
+
     # No need to separate as the query already returns (wavenumber, intensity) pairs
     return list(rows)

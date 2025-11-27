@@ -1,0 +1,6 @@
+{
+  "d_model": 120,
+  "nhead": 3,
+  "nlayers": 3,
+  "num_freqs": 6
+}
