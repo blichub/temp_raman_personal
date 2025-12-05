@@ -39,3 +39,17 @@ make button to add recent sample to database
 
 
 add localization of sample inforrmation (not useful for classification, but for the geographical mapping) that the user inputs manually and can map a plot of the lake positions after
+
+
+05.12.
+
+try to match all spectra of same microplastic to measure a compatibility. do some more data analysis before using it. calculate residues. 
+
+database too small or algorithm is confused by the database. plot all samples for same type of microplastics. if they are different, maybe change robustness relative to shifts. 
+
+focus on order of peaks, distance between peaks, and 
+
+what happens to a raman spectrum when a material ages? and in different conditions? does the polymer change in a way that gets degraded, does some residue change? does the raman redshift?
+
+consider the whole spectrum and make accurate. Higher peaks should carry higher weights. then it shouldnt cover the peaks. because the variance is higher not close to peaks.
+
