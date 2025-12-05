@@ -11,10 +11,12 @@ This script:
 import json
 import os
 from pathlib import Path
+import random
 
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
+from torch.utils.data import random_split
 
 import app.utils as utils
 from app.models.spectrum_model import IrregularSpectrumClassifier, collate_irregular
@@ -53,6 +55,10 @@ def load_dataset():
 def main():
     MODEL_DIR.mkdir(parents=True, exist_ok=True)
 
+    # Reproducible split
+    random.seed(42)
+    torch.manual_seed(42)
+
     data, ids = load_dataset()
     if not data:
         raise RuntimeError("No spectra loaded from database; aborting training.")
@@ -70,10 +76,26 @@ def main():
     else:
         print("CUDA not available or disabled (set USE_CPU=1 to force CPU). Using CPU.")
 
-    loader = DataLoader(
+    # Train/validation split (90/10)
+    val_size = max(1, int(0.1 * len(data)))
+    train_size = len(data) - val_size
+    train_ds, val_ds = random_split(
         data,
+        [train_size, val_size],
+        generator=torch.Generator().manual_seed(42),
+    )
+
+    train_loader = DataLoader(
+        train_ds,
         batch_size=16,
         shuffle=True,
+        collate_fn=lambda b: collate_irregular(b, pad_value=0.0),
+        pin_memory=use_cuda,
+    )
+    val_loader = DataLoader(
+        val_ds,
+        batch_size=16,
+        shuffle=False,
         collate_fn=lambda b: collate_irregular(b, pad_value=0.0),
         pin_memory=use_cuda,
     )
@@ -95,11 +117,29 @@ def main():
     scaler = torch.amp.GradScaler("cuda", enabled=use_cuda)
 
     epochs = 8
+    def evaluate(loader):
+        model.eval()
+        correct = 0
+        total = 0
+        with torch.no_grad(), torch.amp.autocast("cuda", enabled=use_cuda):
+            for x_wn, y_i, mask, labels in loader:
+                x_wn = x_wn.to(device, non_blocking=use_cuda)
+                y_i = y_i.to(device, non_blocking=use_cuda)
+                mask = mask.to(device, non_blocking=use_cuda)
+                labels = labels.to(device, non_blocking=use_cuda)
+                logits = model(x_wn, y_i, key_padding_mask=mask)
+                preds = torch.argmax(logits, dim=1)
+                correct += (preds == labels).sum().item()
+                total += labels.size(0)
+        acc = correct / total if total else 0.0
+        model.train()
+        return acc
+
     for epoch in range(epochs):
         running = 0.0
-        total_steps = len(loader)
-        print(f"Starting epoch {epoch + 1}/{epochs} ({total_steps} batches)...")
-        for step, (x_wn, y_i, mask, labels) in enumerate(loader, start=1):
+        total_steps = len(train_loader)
+        print(f"Starting epoch {epoch + 1}/{epochs} ({total_steps} train batches)...")
+        for step, (x_wn, y_i, mask, labels) in enumerate(train_loader, start=1):
             x_wn = x_wn.to(device, non_blocking=use_cuda)
             y_i = y_i.to(device, non_blocking=use_cuda)
             mask = mask.to(device, non_blocking=use_cuda)
@@ -115,9 +155,11 @@ def main():
             running += loss.item() * labels.size(0)
 
             if step % max(1, total_steps // 5) == 0:
-                print(f"  Batch {step}/{total_steps} - running_loss_avg: {running / (step * loader.batch_size):.4f}")
+                print(f"  Batch {step}/{total_steps} - running_loss_avg: {running / (step * train_loader.batch_size):.4f}")
 
-        print(f"Epoch {epoch + 1}/{epochs} - loss: {running / len(loader.dataset):.4f}")
+        train_loss = running / len(train_loader.dataset)
+        val_acc = evaluate(val_loader)
+        print(f"Epoch {epoch + 1}/{epochs} - train_loss: {train_loss:.4f} - val_acc: {val_acc:.4f}")
 
     torch.save(model.state_dict(), MODEL_PATH)
     CLASS_MAP_PATH.write_text(json.dumps(class_to_idx, indent=2))
