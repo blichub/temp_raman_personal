@@ -53,3 +53,5 @@ what happens to a raman spectrum when a material ages? and in different conditio
 
 consider the whole spectrum and make accurate. Higher peaks should carry higher weights. then it shouldnt cover the peaks. because the variance is higher not close to peaks.
 
+attempt to make plot of ideal sample for each plastic
+make clustering information.

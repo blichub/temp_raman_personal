@@ -12,6 +12,8 @@ import json
 import os
 from pathlib import Path
 import random
+import re
+from collections import Counter
 
 import torch
 import torch.optim as optim
@@ -27,10 +29,19 @@ MODEL_DIR = Path("app/model_cache")
 MODEL_PATH = MODEL_DIR / "irregular_spectrum_classifier.pth"
 CLASS_MAP_PATH = MODEL_DIR / "irregular_class_map.json"
 CONFIG_PATH = MODEL_DIR / "irregular_config.json"
+GROUP_MAP_PATH = MODEL_DIR / "irregular_group_map.json"
+ID_TO_GROUP_PATH = MODEL_DIR / "irregular_id_to_group.json"
+
+
+def normalize_base_name(name: str) -> str:
+    cleaned = re.sub(r"\s*PLAS\d+$", "", name).strip()
+    parts = re.split(r"\s+\d+(?:\.|\s|$)", cleaned, maxsplit=1)
+    return parts[0].strip() if parts else cleaned
 
 
 def load_dataset():
     sample_ids = utils.get_all_ids(DB_PATH)
+    id_to_group = {sid: normalize_base_name(sid) for sid in sample_ids}
     data = []
 
     for sid in sample_ids:
@@ -47,9 +58,9 @@ def load_dataset():
         max_i = torch.max(ints_t).clamp(min=1e-6)
         ints_t = ints_t / max_i
 
-        data.append({"wn": wns_t, "intensity": ints_t, "label": sid})
+        data.append({"wn": wns_t, "intensity": ints_t, "label": id_to_group[sid]})
 
-    return data, sample_ids
+    return data, id_to_group
 
 
 def main():
@@ -59,11 +70,12 @@ def main():
     random.seed(42)
     torch.manual_seed(42)
 
-    data, ids = load_dataset()
+    data, id_to_group = load_dataset()
     if not data:
         raise RuntimeError("No spectra loaded from database; aborting training.")
 
-    class_to_idx = {cid: i for i, cid in enumerate(ids)}
+    groups = sorted(set(id_to_group.values()))
+    class_to_idx = {g: i for i, g in enumerate(groups)}
     for d in data:
         d["label"] = class_to_idx[d["label"]]
 
@@ -84,6 +96,20 @@ def main():
         [train_size, val_size],
         generator=torch.Generator().manual_seed(42),
     )
+
+    train_labels = [data[i]["label"] for i in train_ds.indices]
+    train_counts = Counter(train_labels)
+    class_weights = []
+    for idx in range(len(class_to_idx)):
+        count = train_counts.get(idx, 0)
+        if count == 0:
+            class_weights.append(0.0)
+        else:
+            class_weights.append(1.0 / (count ** 0.5))
+    class_weights = torch.tensor(class_weights, dtype=torch.float32)
+    nonzero = class_weights[class_weights > 0]
+    if len(nonzero) > 0:
+        class_weights = class_weights * (len(nonzero) / nonzero.sum())
 
     train_loader = DataLoader(
         train_ds,
@@ -112,7 +138,7 @@ def main():
         num_freqs=model_cfg["num_freqs"],
     ).to(device)
 
-    criterion = torch.nn.CrossEntropyLoss()
+    criterion = torch.nn.CrossEntropyLoss(weight=class_weights.to(device))
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     scaler = torch.amp.GradScaler("cuda", enabled=use_cuda)
 
@@ -163,10 +189,14 @@ def main():
 
     torch.save(model.state_dict(), MODEL_PATH)
     CLASS_MAP_PATH.write_text(json.dumps(class_to_idx, indent=2))
+    GROUP_MAP_PATH.write_text(json.dumps(class_to_idx, indent=2))
+    ID_TO_GROUP_PATH.write_text(json.dumps(id_to_group, indent=2))
     CONFIG_PATH.write_text(json.dumps(model_cfg, indent=2))
 
     print(f"Saved model to {MODEL_PATH}")
     print(f"Saved class map to {CLASS_MAP_PATH}")
+    print(f"Saved group map to {GROUP_MAP_PATH}")
+    print(f"Saved id-to-group map to {ID_TO_GROUP_PATH}")
     print(f"Saved model config to {CONFIG_PATH}")
 
 
